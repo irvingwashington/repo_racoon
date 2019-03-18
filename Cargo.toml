@@ -1,0 +1,13 @@
+[package]
+name = "repo_racoon"
+version = "0.1.0"
+authors = ["Maciek Dubiński <maciek@dubinski.net>"]
+edition = "2018"
+
+[dependencies]
+github-rs = { git = "https://github.com/rust-github/github-rs/" }
+serde = "*"
+serde_json = "1.0"
+base64 = "*"
+clap = "*"
+threadpool = "*"
