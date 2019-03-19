@@ -5,6 +5,7 @@ mod github_repo;
 mod github_repos;
 mod recognizer;
 mod repo_path;
+mod repos_info;
 
 extern crate base64;
 extern crate clap;
@@ -16,7 +17,8 @@ use github_repo::GithubRepo;
 use repo_path::RepoPath;
 use std::sync::{Arc, Mutex};
 use threadpool::ThreadPool;
-use std::collections::HashMap;
+use repos_info::ReposInfo;
+use formatter::Formats;
 
 fn repos_to_check(matches: &clap::ArgMatches<'static>, github_token: &str) -> Vec<String> {
     let repos_to_check;
@@ -67,20 +69,17 @@ fn main() {
     let github_token = matches.value_of("github_token").unwrap().to_string();
 
     let pool = ThreadPool::new(WORKERS_NUM);
-
-    let mut result : HashMap<String, Vec<recognizer::NamedProperties>> = HashMap::new();
-    let data = Arc::new(Mutex::new(result));
+    let repos_info = Arc::new(Mutex::new(ReposInfo::new()));
 
     for repo_path in repo_paths(repos_to_check(&matches, &github_token)) {
         let github_token_copy = github_token.clone();
-        let data = Arc::clone(&data);
+        let data = Arc::clone(&repos_info);
         pool.execute(move || {
             match GithubRepo::from_repo_path(&repo_path, &github_token_copy) {
                 Ok(github_repo) => {
-                    if let Ok((languages, tools)) = recognizer::recognize(&github_repo) {
+                    if let Ok(repo_properties) = recognizer::recognize(&github_repo) {
                         let mut data = data.lock().unwrap();
-                        eprintln!("Inserting {:?} {:?} to {:?} ({:?})", languages, tools, repo_path.path, data);
-                        data.insert(repo_path.path.clone(), vec![languages, tools]);
+                        data.insert(repo_path.path.clone(), repo_properties);
                     } else {
                         eprintln!("Recognition failed for {:?}", github_repo)
                     }
@@ -90,5 +89,7 @@ fn main() {
         });
     }
     pool.join();
-    println!("Data: {:?}", data);
+    let repos_info = Arc::try_unwrap(repos_info).unwrap().into_inner().unwrap();
+
+    formatter::output_formatted(&repos_info, Formats::JSON);
 }

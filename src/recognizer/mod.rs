@@ -5,13 +5,26 @@ use std::collections::HashMap;
 pub mod ruby;
 
 pub type Properties = HashMap<String, String>;
-pub type NamedProperties = HashMap<String, Properties>;
 
-pub fn recognize(repo: &GithubRepo) -> Result<(NamedProperties, NamedProperties), AppError> {
-    let mut recognized_languages = NamedProperties::new();
-    let mut recognized_tools = NamedProperties::new();
+// {
+//   "Airhelp/ah-cockpit":
+//   {
+//     "languages": [
+//       {"name": "Ruby", "version": "2.4.4", "source": ".ruby-version"}
+//     ],
+//     "tools": [
+//       {"name": "docker", "version": "1.2.3"}
+//     ]
+//   }
+// }
 
+pub type RepoProperties = HashMap<String, Vec<Properties>>;
+
+pub fn recognize(repo: &GithubRepo) -> Result<RepoProperties, AppError> {
     let languages = repo.languages()?;
+
+    let mut repo_languages = Vec::new();
+    let mut repo_tools = Vec::new();
 
     for (language, bytes) in languages {
         let result = match language.as_ref() {
@@ -26,13 +39,17 @@ pub fn recognize(repo: &GithubRepo) -> Result<(NamedProperties, NamedProperties)
 
         let (result_langs, result_tools) = result.unwrap();
 
-        for (lang_name, properties) in result_langs {
-            recognized_languages.insert(lang_name, properties);
+        for lang in result_langs {
+            repo_languages.push(lang);
         }
 
-        for (tool, properties) in result_tools {
-            recognized_tools.insert(tool, properties);
+        for tool in result_tools {
+            repo_tools.push(tool);
         }
     }
-    Ok((recognized_languages, recognized_tools))
+    let mut repo_properties = RepoProperties::new();
+    repo_properties.insert("languages".to_string(), repo_languages);
+    repo_properties.insert("tools".to_string(), repo_tools);
+
+    Ok(repo_properties)
 }
