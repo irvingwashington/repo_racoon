@@ -1,6 +1,7 @@
 use crate::app_error::AppError;
 use crate::github_repo::GithubRepo;
 use crate::recognizer::{Properties};
+use regex::Regex;
 
 pub fn recognize(repo: &GithubRepo, bytes: usize) -> (Vec<Properties>, Vec<Properties>) {
     // Find ruby versions, take versions from those files
@@ -17,6 +18,9 @@ pub fn recognize(repo: &GithubRepo, bytes: usize) -> (Vec<Properties>, Vec<Prope
 
 fn recognize_ruby_versions(repo: &GithubRepo, _bytes: usize) -> Result<Vec<Properties>, AppError> {
     let ruby_version_files = repo.search_file(".ruby-version".to_string())?;
+    if ruby_version_files.is_empty() {
+        return recognize_ruby_version_fallback(&repo, _bytes);
+    }
     let mut rubies = Vec::new();
 
     for file in ruby_version_files {
@@ -29,6 +33,39 @@ fn recognize_ruby_versions(repo: &GithubRepo, _bytes: usize) -> Result<Vec<Prope
         props.insert("name".to_string(), "Ruby".to_string());
 
         rubies.push(props);
+    }
+
+    Ok(rubies)
+}
+
+fn recognize_ruby_version_fallback(repo: &GithubRepo, _bytes: usize) -> Result<Vec<Properties>, AppError> {
+    let ruby_gemfiles = repo.search_file("Gemfile".to_string())?;
+    let mut rubies = Vec::new();
+
+    // 2.6.1, 2.3.0.preview-2, etc.
+    let version_regex = Regex::new(r"\d+\.\d+\.\d+[a-z0-9\-]*").unwrap();
+    for file in ruby_gemfiles {
+        if file.ends_with("lock") { continue; }
+
+        let contents = repo.file_contents(&file)?;
+
+        for line in contents.lines() {
+            if !line.starts_with("ruby") {
+                continue;
+            }
+
+            if let Some(captures) = version_regex.captures(line) {
+                if let Some(version) = captures.get(0) {
+                    let mut props = Properties::with_capacity(3);
+                    props.insert("source".to_string(), file);
+                    props.insert("version".to_string(), version.as_str().to_string());
+                    props.insert("name".to_string(), "Ruby".to_string());
+
+                    rubies.push(props);
+                    break;
+                }
+            }
+        }
     }
 
     Ok(rubies)

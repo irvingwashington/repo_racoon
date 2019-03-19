@@ -10,6 +10,7 @@ mod repos_info;
 extern crate base64;
 extern crate clap;
 extern crate github_rs;
+extern crate regex;
 extern crate serde;
 extern crate serde_json;
 
